@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/otm/cloudwatch-alarm-exporter/alertmanager"
@@ -27,6 +28,7 @@ import (
 func main() {
 	portFlag := pflag.Int("port", 8080, "The HTTP `port` to listen to")
 	regionFlag := pflag.String("region", "", "The AWS region to use, eg 'eu-west-1'")
+	roleArnFlag := pflag.String("role", "", "The AWS role to assume")
 	retriesFlag := pflag.Int("retries", 1, "The `number` of retries when fetching alarms")
 	alertManagerFlag := pflag.String("alertmanager", "", "`URL` to alert manager")
 	refreshIntervalFlag := pflag.Int("refresh", 10, "Time in `seconds` between refreshing alarms")
@@ -36,17 +38,24 @@ func main() {
 	if *regionFlag == "" {
 		*regionFlag = os.Getenv("AWS_REGION")
 	}
-
-	sess, err := session.NewSession(&aws.Config{
-		Region:     regionFlag,
-		MaxRetries: retriesFlag,
-	})
-
-	if err != nil {
-		log.Fatalf("Unable to create session: %s", err)
+	if *roleArnFlag == "" {
+		*roleArnFlag = os.Getenv("AWS_ROLE_ARN")
 	}
 
-	cw := cloudwatch.New(sess)
+	sess := session.Must(session.NewSession(&aws.Config{
+		Region:     regionFlag,
+		MaxRetries: retriesFlag,
+	}))
+
+	var cw *cloudwatch.CloudWatch
+
+	if *roleArnFlag != "" {
+		creds := stscreds.NewCredentials(sess, *roleArnFlag)
+		cw = cloudwatch.New(sess, &aws.Config{Credentials: creds})
+	} else {
+		cw = cloudwatch.New(sess)
+	}
+
 	ca := CloudwatchAlarms{
 		alarmDescriber: cw,
 		tags:           *tagsFlag,
