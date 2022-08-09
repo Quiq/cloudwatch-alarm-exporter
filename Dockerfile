@@ -1,18 +1,23 @@
-FROM golang:1.12.7-alpine
+FROM golang:1.19.0-alpine3.16 as builder
 
-WORKDIR /go/src/github.com/otm/cloudwatch-alarm-exporter
-COPY . /go/src/github.com/otm/cloudwatch-alarm-exporter
+ENV GITHUB_ORG otm
+ENV PROJECT_NAME cloudwatch-alarm-exporter
+ENV BUILD_ORG Quiq
+ENV BUILD_TAG master
 
-RUN go build -o cloudwatch-alarm-exporter \
-    && cp cloudwatch-alarm-exporter /bin/ \
-    && mkdir -p /cloudwatch-alarm-exporter /etc/cloudwatch-alarm-exporter/aws \
-    && chown -R nobody:nogroup /cloudwatch-alarm-exporter /etc/cloudwatch-alarm-exporter \
-    && rm -rf /go
+RUN apk update && \
+    apk add ca-certificates git bash gcc musl-dev && \
+    git config --global http.https://gopkg.in.followRedirects true && \
+    git clone --depth 1 --branch $BUILD_TAG https://github.com/$BUILD_ORG/$PROJECT_NAME.git $GOPATH/src/github.com/$GITHUB_ORG/$PROJECT_NAME && \
+    cd $GOPATH/src/github.com/$GITHUB_ORG/$PROJECT_NAME && \
+    go mod init && \
+    go mod tidy && \
+    go build -mod=readonly -o /opt/$PROJECT_NAME github.com/$GITHUB_ORG/$PROJECT_NAME
 
-USER       nobody
-ENV        AWS_CONFIG_FILE=/etc/cloudwatch-alarm-exporter/aws/config
-ENV        AWS_SHARED_CREDENTIALS_FILE=/etc/cloudwatch-alarm-exporter/aws/credentials
-EXPOSE     8080
-WORKDIR    /cloudwatch-alarm-exporter
-ENTRYPOINT [ "/bin/cloudwatch-alarm-exporter" ]
-CMD        [ "--port=8080", "--retries=1", "--refresh=10" ]
+FROM alpine:3.16
+
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /opt/cloudwatch-alarm-exporter /opt/
+
+USER nobody
+ENTRYPOINT ["/opt/cloudwatch-alarm-exporter"]
