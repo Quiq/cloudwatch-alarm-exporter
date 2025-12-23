@@ -1,4 +1,4 @@
-FROM golang:1.23.2-alpine3.20 as builder
+FROM golang:1.25.5-alpine3.23 as builder
 
 ENV GITHUB_ORG otm
 ENV PROJECT_NAME cloudwatch-alarm-exporter
@@ -12,7 +12,7 @@ RUN apk update && \
     cd $GOPATH/src/github.com/$GITHUB_ORG/$PROJECT_NAME && \
     go build -mod=readonly -o /opt/$PROJECT_NAME github.com/$GITHUB_ORG/$PROJECT_NAME
 
-FROM alpine:3.20
+FROM alpine:3.23
 
 RUN apk upgrade --no-cache && apk add --no-cache --upgrade ca-certificates
 COPY --from=builder /opt/cloudwatch-alarm-exporter /opt/
